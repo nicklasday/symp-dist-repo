@@ -1,42 +1,20 @@
-from sympy import *
+from sympy import factorial
 
 class T_symb_elt:
-    
     def __init__(self,vec,parent):
         '''vec: a list of length len(self.parent.basis) with integer entries'''
         self.parent=parent
         self.vec=Matrix(vec)
         if shape(self.vec)[1]!=1: self.vec=self.vec.transpose() # column vector
-        if shape(self.vec)[0]!=parent.heis_dim+4:
-            raise constr_Mat_size_exception
-        self.heis_dim=parent.heis_dim
+        if shape(self.vec)[0]!=len(parent.basis_strs):
+            raise constr_Mat_size_exception()
         self.ad_mat_cache={}
+        self.ext_alg=ext_alg(self)
+        self.cochain_complex=cochain_complex(self)
+        # To Do: Introduce filtered base here
         
     def __str__(self):
-        if self==0: return '0'
-        result=''
-        cntr=0
-        while result=='':
-            if self.vec[cntr]!=0:
-                if self.vec[cntr]==1:
-                    result=str(self.parent.basis[cntr])
-                elif self.vec[cntr]==-1:
-                    result='-'+str(self.parent.basis[cntr])
-                elif type(self.vec[cntr])==Add:
-                    result='('+str(self.vec[cntr])+')*'+str(self.parent.basis[cntr])
-                else:
-                    result = str(self.vec[cntr])+'*'+str(self.parent.basis[cntr])
-            cntr+=1
-        for i in range(cntr,len(self.parent.basis)):
-            if self.vec[i]==1:
-                result+=' + '+str(self.parent.basis[i])
-            elif self.vec[i]==-1:
-                result+=' - '+str(self.parent.basis[i])
-            elif self.vec[i]!=0:
-                if type(self.vec[i])==Add: c_str='('+str(self.vec[i])+')*'
-                else: c_str=str(self.vec[i])
-                result+=' + '+c_str+'*'+str(self.parent.basis[i])
-        return result
+        return str_from_vec(self.vec,self.parent.basis)
 
     def __repr__(self):
         return str(self)
@@ -68,107 +46,198 @@ class T_symb_elt:
     def __rmul__(self,other):
         return self*other
         
-    def ad_mat(self,mod='g',d=None):
-        """returns the matrix representing the ad action of self on a module among
-        g (default), m, g^*, exterior alg of m, or CE complex of m with coeffs in g.
+    def Ad_mat(self,mod='g',d=None,w=None,filtered=False):
+        """Returns the Adjoint matrix of self acting on mod
+        INPUTS:
+            * "mod" -- module of action, among 'g', 'g_dual','m','m_dual,'E','CE'
+            * "d" -- degree of exterior element/cochain, if applicable
+            * "w" -- weight of exterior element/cochain, if applicable
+            
+        Importantly, m, m_dual, Emd (Exterior alg of m_dual), and CE=C(m,g) are only
+        m-modules, not g-modules. Accordingly, g_+ basis elts return NONE for these modules
         
-        INPUT:
-            * "mod" -- among 'g','m','g_dual','m_dual','E', and 'CE'"""
-        if mod not in self.ad_mat_cache:
-            r=SparseMatrix(zeros(len(self.parent.basis)))
-            for i in range(len(self.parent.basis)):
-                if self.vec[i]!=0: 
-                    r+=self.vec[i]*self.parent.ad_mats(i,mod,d)
-            self.ad_mat_cache[mod]=r
-        return self.ad_mat_cache[mod]
+        If mod is among 'E' or 'CE' the result is a dictionary with keys (td,tw), target deg and wght
+        """
+        if mod in ['E','CE']:
+            return NotImplemented
+        if mod in ['g','g_dual','m','m_dual']:
+            if d!=None or w!=None: raise NotImplementedException
+            return exp(self.ad_mat(mod))
+
+    def ad_mat(self,mod='g',d=None,w=None,filtered=False):
+        """Returns the adjoint matrix of self acting on mod, or a dict of such matrices
+        INPUTS:
+            * "mod" -- module of action, among 'g', 'g_dual','m','m_dual,'E','CE'
+            * "d" -- degree of exterior element/cochain, if applicable
+            * "w" -- weight of exterior element/cochain, if applicable
+            
+        Importantly, m, m_dual, Emd (Exterior alg of m_dual), and CE=C(m,g) are only
+        m-modules, not g-modules. Accordingly, g_+ basis elts return NONE for these modules
         
-    def ad(self,t,dual=False):
-        '''returns: a T_symb_elt object representing ad(self,t)
-           if dual=True, the object returned represents ad(self,t^*)'''
+        If mod is among 'E' or 'CE' the result is a dictionary with keys (td,tw), target deg and wght
+        """
+        if mod in ['E','CE']:
+            return NotImplmented
+            # I shouldn't need this
+        
+        if mod in ['g','g_dual','m','m_dual']:
+            if d!=None or w!=None: raise NotImplementedException
+            r=SparseMatrix(zeros(self.parent.mod_dim(mod))) # a matrix of appropriate dim
+            for i in range(len(self.parent.basis)): 
+                if type(self.vec[i])==type(IndexedBase('K')[0]):
+                    for j in range(shape(self.parent.basis[i].ad_mat(mod))[0]):
+                        for k in range(shape(self.parent.basis[i].ad_mat(mod))[1]):
+                            r[j,k]+=self.vec[i]*self.parent.basis[i].ad_mat(mod)[j,k]
+                else: r+=self.vec[i]*self.parent.basis[i].ad_mat(mod)
+            return r
+        
+    def ad(self,t,mod='g'):
+        """Returns an object representing ad(self,t), where t has constant coefficients
+           INPUTS:
+           * 't' - an element of mod with constant coefficients (i.e., no symbols or indexed objects)
+           * 'mod' - among 'g','m','g_dual','m_dual','E,', and 'C'
+           """
         P=self.parent
         E=self.parent.ext_alg
         C=self.parent.cochain_complex
         
-        # # g and g_dual
-        if type(t)==T_symb_elt or type(t)==T_symb_basis_elt:
-            if t.parent!=P: raise invalid_parent_exception
-            if dual: mod='g_dual'
-            else: mod='g'
-            if self==0 or t==0:
-                return P.elt([0]*len(P.basis))
-            return P.elt(self.ad_mat(mod)*t.vec)
-  
-        # # To Do: Implement ad for exterior algebra and cochains
-        # # (Replace deprecated code below)
-       
-        ### Begin Deprecated ------------------------------------------------
-        if type(t)==ext_elt:
-            if t.parent!=E: raise invalid_parent_exception
-            if t==0 or self==0: return E.elt({})
+        if t.parent==E: mod='E'
+        if t.parent==C: mod='CE'
         
-            # result=E.elt()
-            # for E in 
-            
-            result=E.elt({})
-            for k in t.coeff_dict:
-                deg=E.deg(E.elt({k:1}))
-                for i in range(len(P.basis)):
-                    if self.vec[i]!=0:
-                        result+=self.vec[i]*t.coeff_dict[k]*P.basis[i].ext_ad_dicts[deg][k]
-            return result
+        if mod in ['E','CE']:
+            r={}
+            for sd in t.vd: # source deg
+                for sw in t.vd[sd]: # source wght
+                    for i in range(len(P.basis)): # entries of self
+                        if self.vec[i]!=0:
+                            td=sd # target deg
+                            tw=sw+P.basis[i].wght # target weight
+                            im_vec=self.vec[i]*P.basis[i].ad_mat(mod,sd,sw)*t.vd[sd][sw]
+                            if td not in r: r[td] = {}
+                            if tw not in r[td]: r[td][tw]=zeros(len(t.parent.basis(td,tw)),1)
+                            r[td][tw]+=im_vec
+            if mod=='E': return E.elt(r)
+            if mod=='CE': return C.elt(r)
+                        
+        if mod in ['g','g_dual']: return t.parent.elt(self.ad_mat(mod)*t.vec)
+        if mod in ['m','m_dual']: 
+            temp=self.ad_mat(mod)*Matrix(t.vec[3:len(t.vec)])
+            return t.parent.elt([0]*3+list(temp))
+
+    def __Ad_wght_0(self,t):
+        P=self.parent
+        C=P.cochain_complex
+        r={}
         
-        if type(t)==cochain:
-            if t.parent!=C: raise invalid_parent_exception
-            if t==0 or self==0: return C.elt({})
-            
-            result=C.cochain({})
-            for k in t.coeff_dict:
-                deg=C.deg(C.cochain({k:1}))
+        for d in t.vd: # source deg
+            if d not in r: r[d] = {}
+            for w in t.vd[d]: # source wght
+                exp_list=[0]*len(t.vd[d][w])
                 for i in range(len(P.basis)):
-                    if self.vec[i]!=0:
-                        result+=self.vec[i]*t.coeff_dict[k]*P.basis[i].cochain_ad_dicts[deg][k]
-            return result
-        raise ValueError('ad must only be applied to objects T_symb_elt, T_symb_basis_elt, ext_elt, and cochain')
-        ### End Deprecated ------------------------------------------------
+                    if P.basis[i].wght==0:
+                        P.basis[i].init_ad_mat('CE',d,w)
+                        for j in range(len(exp_list)):
+                            exp_list[j]+=self.vec[i]*P.basis[i].scalar_cache['CE'][d][w][j]
+                coeff_list=[exp(A) for A in exp_list]
+                r[d][w]=Matrix([[t.vd[d][w][i]*coeff_list[i]] for i in range(len(coeff_list))])
+        return self.parent.cochain_complex.elt(r)
+
+    def __Ad_wght_1(self,t,mod='CE'):
+        P=self.parent
+        C=self.parent.cochain_complex
+        r={}
+        # scrub t of shape (0,0) entries
+        for d in t.vd:
+            for w in list(t.vd[d].keys()):
+                if shape(t.vd[d][w])[1]==0:t.vd[d].pop(w)
+        
+        for d in t.vd:
+            r[d]={}
+            for w in t.vd[d]:
+                r[d][w]=t.vd[d][w]
+                if shape(r[d][w])[0]==0 or shape(r[d][w])[1]==0:
+                    print('deg',d,'wght',w,'has shape', shape(r[d][w]))
+        for d in t.vd: # source deg
+            for w in t.vd[d]: # source wght
+                for i in range(len(P.basis)): # entries of self
+                    if self.vec[i]!=0 and P.basis[i].wght==1:
+                        dom_vec=t.vd[d][w]
+                        sw,tw=(w,w+P.basis[i].wght) # source and target deg and wght
+                        if d not in r: r[d] = {}
+                        k=1
+                        while dom_vec!=zeros(*shape(dom_vec)):
+                            im_vec=(self.vec[i]*P.basis[i].ad_mat(mod,d,sw)*dom_vec)/k
+                            if tw not in r[d]: 
+                                r[d][tw]=zeros(len(C.basis(d,tw)),1)
+                            r[d][tw]+=im_vec
+                            
+                            dom_vec=im_vec
+                            sw,tw=(sw+P.basis[i].wght,tw+P.basis[i].wght)
+                            k+=1
+        return C.elt(r)
+        
+    def Ad(self,t,mod='g',coord='second kind'):
+        """For the cochain complex, this returns an object representing Ad(exp(w0)exp(w1),t) if coord=='second kind', 
+        where t has constant coefficients and w0+w1=self is the weight decomposition of self.
+        If coord=='first kind', this returns exp(ad(self))
+        
+           INPUTS:
+           * 't' - an element of mod with constant coefficients
+           * 'mod' - among 'g','m','g_dual','m_dual','E,', and 'C'
+           * 'coord' - among 'first kind' and 'second kind'
+           """
+        P=self.parent
+        E=self.parent.ext_alg
+        C=self.parent.cochain_complex
+        
+        if t.parent==E: mod='E'
+        if t.parent==C: mod='CE'
+
+        if mod=='CE':
+            if coord=='first kind': return NotImplemented # I shouldn't need this, really
+            return self.__Ad_wght_0(self.__Ad_wght_1(t))
+        if mod in ['g','g_dual','m','m_dual']:
+            if coord=='first kind': return t.parent.elt(self.Ad_mat(mod)*t.vec)
+            if coord=='second kind': 
+                return t.parent.elt(exp(P.second_kind_to_first(self.vec).ad_mat(mod))*t.vec)
         
     def iprod(self,other):
-        '''other: another T_symb_elt or T_symb_basis_elt
-           returns: the inner product of self and other'''
-        if not hasattr(other,'parent'): raise ValueError('iprod recieved an invalid arg') 
-        if self.parent!=other.parent: raise invalid_parent_exception
-        return((self.vec.transpose()*self.parent.Q*other.vec)[0])
+        """Returns the inner product of self and other
+        INPUTS:
+        * 'other' - another T_symb_elt or T_symb_basis_elt
+        """
+        return self.parent.iprod(self,other)
     
     def cast_as_ext_elt(self):
-        result_dict=remove_zeros({(self.parent.basis_strs[i],):self.vec[i] for i in range(len(self.vec))})
-        return self.parent.ext_alg.elt(result_dict)
+        l=len(self.parent.basis)-len(self.parent.m_basis)
+        if self.vec[0:l]!= [0]*l: print('T_symb_elt with positive component cannot be cast as ext_elt')
+        return self.parent.ext_alg.elt_from_cd({(self.parent.basis_strs[i],):self.vec[i]
+                                            for i in range(len(self.parent.basis)) if self.vec[i]!=0})
     
     def cast_as_cochain(self):
-        result_dict=remove_zeros({(self.parent.basis_strs[i],):self.vec[i] for i in range(len(self.vec))})
-        return self.parent.cochain_complex.cochain(result_dict)
-    
-    
-    
+        return self.parent.cochain_complex.elt_from_cd({(self.parent.basis_strs[i],):self.vec[i]
+                                            for i in range(len(self.parent.basis)) if self.vec[i]!=0})
+
+# %% [markdown]
+# A short remark on dual modules: $\mathfrak{m}^*$ is separately a $\mathfrak{g}^0$-module via $X\mapsto -\big(\text{ad}X|_{\mathfrak{m}}\big)^*$ and a $\mathfrak{g}_+$-module via $X\mapsto-\big(\text{ad}X\big)^*|_{\mathfrak{m}^*}$.
+# 
+# We want $\mathfrak{g}_+$-action for the purposes of the Ad action on the cochain complex
+
+# %%
 class T_symb_basis_elt(T_symb_elt):
-    def __init__(self,str_rep,wght,parent):
+    def __init__(self,str_rep,wght,parent,i,am):
         self.str_rep=str_rep
         self.wght=wght
-        tvec=SparseMatrix([0]*(parent.heis_dim+4))
-        
-        basis_str_list=['Y','H','E','X']
-        for i in range(1,parent.heis_dim):
-            basis_str_list.append('e%d'%i)
-        basis_str_list.append('N')
-        tvec[basis_str_list.index(str_rep)]=1
+        tvec=SparseMatrix([0]*(len(parent.basis_strs)))
+        tvec[i]=1
         
         super().__init__(tvec,parent)
-
-        self.ad_dict={}
-        
-        ###  Begin Deprecated --------------------------------------------
-        self.dual_ad_dict={}
-        self.cochain_ad_dicts={}
-        self.ext_ad_dicts={}
-        ###  End Deprecated --------------------------------------------
+        self.ad_mat_cache={'g':SparseMatrix(am)}
+        self.length=None
+        if parent.Q!=None:
+            i=parent.basis_strs.index(str_rep)
+            self.length=parent.Q[i,i]
+        self.scalar_cache={'CE':{},'E':{}}
         
     def __str__(self):
         return self.str_rep
@@ -192,158 +261,130 @@ class T_symb_basis_elt(T_symb_elt):
         if self.parent!=other.parent: raise invalid_parent_exception 
         return self.parent.basis.index(self)>=self.parent.basis.index(other)
     
-    def ad_mat(self,mod='g',d=None):
-        return self.parent.ad_mats(self.parent.basis.index(self),mod,d)
-
-
-
-class T_symb:
-    def __init__(self,heis_dim):
-        if heis_dim%2!=1 or heis_dim<1: raise heis_dim_exception
-           
-        self.heis_dim=heis_dim
-        self.basis_strs=['Y','H','E','X']
-        for i in range(1,heis_dim):
-            self.basis_strs.append('e%d'%i)
-        self.basis_strs.append('N')
+    def ad_mat(self,mod='g',deg=None,wght=None):
+        """Returns the mat rep of ad(self) on mod, either as a matrix
+        or as a dictionary with keys (target_deg, target_wght) and matrix values
+        """
+        if mod=='g': return self.ad_mat_cache['g'] # cached upon initialization
+        if mod=='g_dual': return -self.ad_mat('g').transpose()
+        if mod=='m':
+            r=self.ad_mat('g')
+            return r[3:shape(r)[0],3:shape(r)[1]]
+        if mod=='m_dual': 
+            return -self.ad_mat('m').transpose()
         
-        # Weights
-        self.wght_list=[1,0,0,-1]
-        for i in range(4,len(self.basis_strs)-1):
-            self.wght_list.append(-i+3)
-        self.wght_list.append(-heis_dim)
-        
-        self.basis=[T_symb_basis_elt(self.basis_strs[i],self.wght_list[i],self) 
-                    for i in range(len(self.basis_strs))]
-        self.cochain_complex=cochain_complex(self)
-        self.ext_alg=ext_alg(self)
-        
-        self.ad_dict={}
-        self.ad_mat_cache={}
-        self.set_ad_dict()
-        
-        #self.cochain_complex.init_ad_2_cochain()
-        self.Q=SparseMatrix(diag(*[1,2,2,1]+[factorial(i-1)/factorial(heis_dim-i-1)
-                                       for i in range(1,heis_dim)]+[1]))
-        self.iprod_list=[1,2,2,1]+[factorial(i-1)/factorial(heis_dim-i-1) for i in range(1,heis_dim)]+[1]
-        
-
-        
-    def set_ad_dict(self):
-        # I'll try to avoid using this
-        # Following Medvedev's basis/conventions, except the error in [Y,e_i]=(i-1)*(2*m+1-i)e_{i-1}
-        k=len(self.basis)
-        V_basis=self.basis[4:self.heis_dim+3]
-
-        Y=self.basis[0]
-        H=self.basis[1]
-        E=self.basis[2]
-        X=self.basis[3]
-        N=self.basis[-1]
-        ## Set ad_dicts
-        #  First, set ad_dict for each T_symb_basis_elt
-
-        for A in self.basis[0:4]:
-            E.ad_dict[str(A)]=T_symb_elt([0]*k,self)
-        for i in range(1,len(V_basis)+1):
-            E.ad_dict[str(V_basis[i-1])]=V_basis[i-1]
-        E.ad_dict['N']=2*N
-
-        X.ad_dict['Y']=H
-        X.ad_dict['H']=-2*X
-        X.ad_dict['E']=T_symb_elt([0]*k,self)
-        X.ad_dict['X']=T_symb_elt([0]*k,self)
-        for i in range(1,len(V_basis)):
-            X.ad_dict[str(V_basis[i-1])]=V_basis[i]
-        X.ad_dict[str(V_basis[len(V_basis)-1])]=T_symb_elt([0]*k,self)
-        X.ad_dict['N']=T_symb_elt([0]*k,self)
-
-        Y.ad_dict['Y']=T_symb_elt([0]*k,self)
-        Y.ad_dict['H']=2*Y
-        Y.ad_dict['E']=T_symb_elt([0]*k,self)
-        Y.ad_dict['X']=-H
-        Y.ad_dict[str(V_basis[0])]=T_symb_elt([0]*k,self)
-        for i in range(2,len(V_basis)+1):
-            Y.ad_dict[str(V_basis[i-1])]=(i-1)*(self.heis_dim-i)*V_basis[i-2]
-        Y.ad_dict['N']=T_symb_elt([0]*k,self)
-
-        H.ad_dict['Y']=-2*Y
-        H.ad_dict['H']=T_symb_elt([0]*k,self)
-        H.ad_dict['E']=T_symb_elt([0]*k,self)
-        H.ad_dict['X']=2*X
-        for i in range(1,len(V_basis)+1):
-            H.ad_dict[str(V_basis[i-1])]=(2*i-self.heis_dim)*V_basis[i-1]
-        H.ad_dict['N']=T_symb_elt([0]*k,self)
-
-        for i in range(1,len(V_basis)+1):
-            if i>=2: V_basis[i-1].ad_dict['Y']=-(i-1)*(self.heis_dim-i)*V_basis[i-2]
-            else: V_basis[i-1].ad_dict['Y']=T_symb_elt([0]*k,self)
-            V_basis[i-1].ad_dict['H']=-(2*i-self.heis_dim)*V_basis[i-1]
-            V_basis[i-1].ad_dict['E']=-V_basis[i-1]
-            if i<=self.heis_dim-2: V_basis[i-1].ad_dict['X']=-V_basis[i]
-            else: V_basis[i-1].ad_dict['X']=T_symb_elt([0]*k,self)
-            for j in range(1, len(V_basis)+1):
-                if i+j==self.heis_dim: V_basis[i-1].ad_dict[str(V_basis[j-1])]=(-1)**i*N
-                else: V_basis[i-1].ad_dict[str(V_basis[j-1])]=T_symb_elt([0]*k,self)
-            V_basis[i-1].ad_dict['N']=T_symb_elt([0]*k,self)
-
-        N.ad_dict['Y']=T_symb_elt([0]*k,self)
-        N.ad_dict['H']=T_symb_elt([0]*k,self)
-        N.ad_dict['E']=-2*N
-        N.ad_dict['X']=T_symb_elt([0]*k,self)
-        for i in range(1,len(V_basis)+1):
-            N.ad_dict[str(V_basis[i-1])]=T_symb_elt([0]*k,self)
-        N.ad_dict['N']=T_symb_elt([0]*k,self)
-        
-    def ad_mats(self,i,mod='g',d=None):
-        """Returns the adjoint matrix of self.basis[i] acting on mod
+        if deg==None or wght==None: print('ad mat requires deg and wght args for tensor modules')
+        if (mod,deg,wght) not in self.ad_mat_cache: self.init_ad_mat(mod,deg,wght)
+        return self.ad_mat_cache[(mod,deg,wght)]
+    
+    def init_ad_mat(self,mod='g',deg=None,wght=None):
+        """caches the adjoint matrix of this element acting on mod
         INPUTS:
-            * "i" -- integer index of basis element
-            * "mod" -- module of action, among 'g', 'g_dual','m','m_dual,'Emd','CE'
-            * "d" -- degree of exterior/cochain, if applicable
+            * "mod" -- module of action, among 'g', 'g_dual','m','m_dual,'E','CE'
+            * "deg" -- degree of exterior element/cochain, if applicable
+            * "wght" -- wght of exterior element/cochain, if applicable
             
         Importantly, m, m_dual, Emd (Exterior alg of m_dual), and CE=C(m,g) are only
         m-modules, not g-modules. Accordingly, g_+ basis elts return NONE for these modules
         """
-        if (i,mod) in self.ad_mat_cache: return self.ad_mat_cache[(i,mod)]
-    
-        # # g, g_dual
-        if mod in ('g','g_dual'):
-            r=SparseMatrix(zeros(len(self.basis)))
-            for j in range(len(self.basis)):
-                A=self.basis[i].ad_dict[str(self.basis[j])]
-                set_col(r,j,A.vec.transpose())
-            if mod=='g_dual': self.ad_mat_cache[(i,mod)]=-r.transpose()
-            else: self.ad_mat_cache[(i,mod)]=r
-            return self.ad_mat_cache[(i,mod)]
         
-        # # m, m_dual
-        if mod in ('m','m_dual'):
-            if i<3: return None # these are only m modules, not g modules
-            self.ad_mats(self,(i,'g')) # cache the matrices for (i,'g') and (i,'g_dual')
-            r=self.ad_mat_cache(i,'g')
-            self.ad_mat_cache[(i,'m')]=r[3:shape(r)[0],3:shape(r)[1]] # cache m
-            rd=-self.ad_mat_cache(i,'g_dual').transpose()
-            self.ad_mat_cache[(i,'m_dual')]=sd[3:shape(rd)[0],3:shape(rd)[1]] # cache m_dual
-            return self.ad_mat_cache[(i,mod)]
-        
-        # To do: Implement ad_mats for 'E','CE'
-    
-    def set_ad_mats(self):
-        for i in range(len(self.basis)):
-            A=self.basis[i]
-            r=SparseMatrix([A.ad(B).vec for B in self.basis])
-            self.ad_mats.append(r.transpose())
+        if mod=='E':
+            if ('E',deg,wght) in self.ad_mat_cache: return None
+            E=self.parent.ext_alg
+            col_list=[]
+
+            ## Deal with len(basis)=0 cases first
+            l_dom=len(self.parent.ext_alg.basis(deg,wght))
+            l_codom=len(self.parent.ext_alg.basis(deg,wght+self.wght))
+            if l_dom==0 or l_codom==0:
+                self.ad_mat_cache[('E',deg,wght)]=SparseMatrix(zeros(l_codom,l_dom))
+                return self.ad_mat_cache[('E',deg,wght)]
+
+            for k in range(len(E.basis(deg,wght))):
+                W=E.basis(deg,wght)[k] 
+                comp=W.components
+                # compute ad(self)(W) as a vector
+                v=zeros(len(E.basis(deg,wght+self.wght)),1)
+                for i in range(deg): 
+                    adXi=self.ad_mat(mod='m_dual').col(self.parent.m_basis.index(comp[i]))
+                    for j in range(len(self.parent.m_basis)):
+                        if adXi[j]!=0:
+                            s=[str(A) for A in comp]
+                            t=s[0:i]+s[i+1:len(s)]
+                            if self.parent.m_basis_strs[j] not in t:
+                                s[i]=self.parent.m_basis_strs[j]
+                                s,sgn=sort_basis_tuple(tuple(s),self.parent.m_basis_strs)
+                                v[E.dwi(s)[2]]+=sgn*adXi[j]
+                col_list.append(v)
+            self.ad_mat_cache[('E',deg,wght)]=SparseMatrix(list(map(list,col_list))).transpose()
             
-    def Ad_mat(self,A):
-        '''arg: a T_symb_elt or T_symb_basis_elt
-           returns: the matrix rep of Ad(exp(A))'''
-        ad_mat=SparseMatrix(zeros(len(self.basis)))
-        for i in range(len(self.basis)):
-            ad_mat+=A.vec[i]*self.ad_mats(i,'g')
-        return exp(ad_mat)
-            
+        if mod=='CE':
+            if ('CE',deg,wght) in self.ad_mat_cache: return None
+            C=self.parent.cochain_complex
+            if len(C.basis(deg,wght))==0 or len(C.basis(deg,wght+self.wght))==0:
+                self.ad_mat_cache[('CE',deg,wght)]=zeros(len(C.basis(deg,wght+self.wght)),
+                                                         len(C.basis(deg,wght)))
+                return None
+            col_list=[]
+            for k in range(len(C.basis(deg,wght))):
+                W=C.basis(deg,wght)[k] 
+                comp=W.components
+                # compute ad(self)(W) as a vector
+                v=zeros(len(C.basis(deg,wght+self.wght)),1) 
+
+                # Act on the wedge(m^*) part
+                for i in range(deg): 
+                    adXi=self.ad_mat(mod='m_dual').col(self.parent.m_basis.index(comp[i]))
+                    for j in range(len(self.parent.m_basis)):
+                        if adXi[j]!=0:
+                            s=[str(A) for A in comp[0:-1]]
+                            t=s[0:i]+s[i+1:len(s)]
+                            if self.parent.m_basis_strs[j] not in t:
+                                s[i]=self.parent.m_basis_strs[j]
+                                s,sgn=sort_basis_tuple(tuple(s),self.parent.m_basis_strs)
+                                s=list(s)+[str(comp[-1])]
+                                v[C.dwi(tuple(s))[2]]+=sgn*adXi[j]
+
+                # Act on the g part
+                adXi=self.ad_mat().col(self.parent.basis.index(comp[-1]))
+                for j in range(len(self.parent.basis)):
+                    if adXi[j]!=0:
+                        s=[str(A) for A in comp]
+                        s[-1]=self.parent.basis_strs[j]
+                        v[C.dwi(tuple(s))[2]]+=adXi[j]
+                col_list.append(v)
+            self.ad_mat_cache[('CE',deg,wght)]=SparseMatrix(list(map(list,col_list))).transpose()
+
+            # Set the scalar cache for wght 0 elts
+            if self.wght==0:
+                if deg not in self.scalar_cache['CE']: self.scalar_cache['CE'][deg]={}
+                A=self.ad_mat('CE',deg,wght)
+                self.scalar_cache['CE'][deg][wght] = Matrix([A[i,i] for i in range(shape(A)[0])])
     
+    def cast_as_ext_elt(self):
+        return self.parent.ext_alg.elt_from_cd({(str(self),):1})
+    
+    def cast_as_cochain(self):
+        return self.parent.cochain_complex.elt_from_cd({(str(self),):1})
+    
+    def Ad_mat(self,mod='g'):
+        """Returns exp(Ad(self)) for the given module; assumes coordinates of the first kind"""
+        return exp(self.ad_mat(mod))
+
+
+# %%
+class T_symb(object):
+    def __init__(self,basis_strs,wght_list,ad_matrices,Q=None):
+        self.basis_strs=basis_strs
+        self.wght_list=wght_list
+        self.Q=Q
+        self.basis=[T_symb_basis_elt(self.basis_strs[i],self.wght_list[i],
+                                     self,i,ad_matrices[i]) for i in range(len(self.basis_strs))]
+        self.ext_alg=ext_alg(self)
+        self.cochain_complex=cochain_complex(self)
+        self.m_basis=[self.basis[i] for i in range(len(self.basis)) if self.wght_list[i]<0]
+        self.m_basis_strs=[str(A) for A in self.m_basis]
+            
     def jacobi_test(self):
         '''returns: True if the Jacobi identity holds, False otherwise'''
         for A in self.basis:
@@ -358,126 +399,217 @@ class T_symb:
         if vec==None: return(T_symb_elt([0]*len(self.basis),self))
         return T_symb_elt(vec,self)
     
-    def sort_basis_tuple(self,basis_tuple):
-        '''basis_tuple: a tuple of str_reps of T_symb_basis_elt objs
-           returns: a tuple containing an rearrangement of basis_tuple of descending degree, 
-           and the sign of the permutation (either -1 or 1)'''
-        basis_list=list(basis_tuple)
-        sorted_list=basis_list.copy()
-        sorted_list.sort(key=lambda A:self.basis_strs.index(A))
-        return(tuple(sorted_list),permutation_sign(basis_list,sorted_list))
-    
-    
-#     ### Begin Deprecated---------------------------------------------------
-    
-#     def set_ext_ad_dict(self,deg):
-#         '''sets A.ext_ad_dicts[deg] for each A in self.basis'''
-#         # Don't reset a dict that's already been written
-#         if deg in self.basis[0].ext_ad_dicts: return
-#         self.ext_alg.init_basis(deg)
+    def mod_dim(self,mod='g',deg=None,wght=None):
+        """ Returns the dimension of the specified module, with degree and wght possibly specified
+        INPUTS:
+        * 'mod' - the desired module, among 'g','m','g_dual','m_dual','E','CE'
+        * 'deg' - degree
+        * 'wght' - wght
+        """
+        if deg==None and wght==None:
+            if mod in ['g','g_dual']: return len(self.basis)
+            if mod in ['m','m_dual']: return len(self.m_basis)
+            if deg==None: print('degree must be specified to compute mod_dim of E or CE')
+            if mod=='E': return binomial(len(self.m_basis),deg)
+            if mod=='CE': return binomial(len(self.m_basis),deg)*len(self.basis)
         
-#         # initialize if necessary
-#         if self.ext_alg==None: self.ext_alg=ext_alg(self)
-#         if deg not in self.ext_alg.basis:
-#             self.ext_alg.init_basis(deg)
+        if deg==None and wght!=None:
+            if mod=='g': return len([A for A in self.basis if A.wght==wght])
+            if mod=='g_dual': return len([A for A in self.basis if -A.wght==wght])
+            if mod=='m': return len([A for A in self.m_basis if A.wght==wght])
+            if mod=='m_dual': return len([A for A in self.m_basis if -A.wght==wght])
+            if mod in ['E','CE']: raise NotImplementedException
+        
+        if mod in ['g','g_dual','m','m_dual']: print('do not specify deg when computing dim(m) or dim(g)')
             
-#         # construct the dict
-#         for A in self.basis:
-#             A.ext_ad_dicts[deg]={}
+        if wght==None:
+            if mod=='E': return binomial(len(self.m_basis),deg)
+            if mod=='CE': return binomial(len(self.m_basis),deg)*len(self.basis)
         
-#         # set the dict
-#         if deg==0:
-#             for A in self.basis:
-#                 # ad(A,1)=0
-#                 A.ext_ad_dicts[0]={tuple():0}
-#             return
+        if mod=='E': return len(self.ext_alg.basis(deg,wght))
+        if mod=='CE': return len(self.cochain_complex.basis(deg,wght))
         
-#         # set the previous dict
-#         #I'm not sure how to incorporate pickling into this call
-#         self.set_ext_ad_dict(deg-1)
-        
-#         if deg==1:
-#             for A in self.basis:
-#                 for B in self.basis:
-#                     ext_B=self.ext_alg.elt({(str(B),):1})
-#                     temp=A.dual_ad_dict[str(B)].vec
-#                     A.ext_ad_dicts[1][(str(B),)]=self.ext_alg.elt({(str(self.basis[i]),):temp[i]
-#                                                         for i in range(len(self.basis))})
-#             return
-        
-#         for A in self.basis:
-#             for B in self.ext_alg.basis_strs[deg]:
-#                 B1=B[0:len(B)-1]
-#                 ext_B1=self.ext_alg.elt({B1:1})
-#                 B2=B[len(B)-1:len(B)]
-#                 ext_B2=self.ext_alg.elt({B2:1})
-#                 A.ext_ad_dicts[deg][B]=(A.ext_ad_dicts[deg-1][B1].wedge(ext_B2)
-#                                        +ext_B1.wedge(A.ext_ad_dicts[1][B2]))
-                
-#     # To Do: finish writing this algorithm
-#     # (Copy pasted from the above)
-#     def set_cochain_ad_dict(self,deg):
-#         # Don't reset a dict that's already been written
-#         if deg in self.basis[0].cochain_ad_dicts: return
-        
-#         # initialize if necessary
-#         if self.cochain_complex==None: init_cochain_complex(self)
-#         C=self.cochain_complex
-#         if deg not in C.basis:
-#             C.init_basis(deg)
-            
-#         # construct the dict
-#         for A in self.basis:
-#             A.cochain_ad_dicts[deg]={}
-        
-#         # set the dict
-#         if deg==0:
-#             for A in self.basis:
-#                 for B in self.basis:
-#                     v=A.ad_dict[str(B)].vec
-#                     A.cochain_ad_dicts[0][(str(B),)]=C.cochain({(self.basis_strs[i],):v[i]
-#                                                                 for i in range(len(self.basis))})
-#             return
-        
-#         self.set_ext_ad_dict(deg)
-#         for A in self.basis:
-#             for B1 in self.ext_alg.basis_strs[deg]:
-#                 for B2 in self.basis:
-#                     k=B1+(str(B2),)
-#                     c_B2=C.cochain({(str(B2),):1})
-#                     v=A.ad_dict[str(B2)].vec
-#                     c_ad_B2=C.cochain({(str(self.basis[i]),):v[i] for i in range(len(self.basis))})
-#                     t1=self.ext_alg.elt({B1:1}).wedge(c_ad_B2)
-#                     t2=A.ext_ad_dicts[deg][B1].wedge(c_B2)
-#                     A.cochain_ad_dicts[deg][k]=t1+t2
-                    
-#     ### End Deprecated---------------------------------------------------
-    
-    def ad(self,t,c):
-        '''t: a T_symb_elt object
-           c: an object of type T_symb_basis_elt, T_symb_elt, ext_elt, or cochain
-           returns: ad(t,c)'''
-        if type(t)==T_symb_elt or type(t)==T_symb_basis_elt:
-            return t.ad(c)
-        
-        if type(t)==int and t==0: # should I use 'is' here?
-            if type(c)==cochain:
-                return c.parent.cochain({})
-            if type(c)==ext_elt:
-                return c.parent.elt({})
-            if type(c)==T_symb_elt or type(c)==T_symb_basis_elt:
-                return c.parent.elt([0]*len(c.parent.basis))
-        raise ValueError('The first argument of ad should be of type T_symb_elt or T_symb_basis_elt')
+        print('mod_dim module must be among g, m, g_dual, m_dual, E, and CE')
         
     def iprod(self,t1,t2):
         '''t1,t2: of the same type among T_symb_basis_elt, T_symb_elt, ext_elt, and cochain'''
         if not hasattr(t1,'parent') and hasattr(t2,'parent'):
-            raise ValueException('arguments of iprod must have type T_symb_basis_elt, T_symb_elt, ext_elt, or cochain')
+            raise ValueError('arguments of iprod must have type T_symb_basis_elt, T_symb_elt, ext_elt, or cochain')
+        
+        if self.Q==None: print('Inner product matrix Q not initialized for',self)
         
         if t1==0 or t2==0:
             return 0
         
         if t1.parent==t2.parent:
-            return t1.iprod(t2)
+            return (t1.vec.transpose()*self.Q*t2.vec)[0]
         
         raise invalid_parent_exception('arguments of iprod must have the same parent')
+    
+    @staticmethod
+    def ad(A1,A2):
+        return A1.ad(A2)
+
+# %%
+class Symp_symb(T_symb):
+    def __init__(self,heis_dim):
+        if heis_dim<3 or heis_dim%2==0: raise heis_dim_exception
+        self.heis_dim=heis_dim
+        self.basis_strs=['Y','H','E','X']
+        for i in range(1,heis_dim):
+            self.basis_strs.append('e_%d'%i)
+        self.basis_strs.append('N')
+        
+        self.wght_list=[1,0,0,-1]
+        for i in range(4,len(self.basis_strs)-1):
+            self.wght_list.append(-i+3)
+        self.wght_list.append(-heis_dim)
+        Q=SparseMatrix(diag(*[1,2,2,1]+[sympy.factorial(i-1)/factorial(heis_dim-i-1)
+                                        for i in range(1,heis_dim)]+[1]))
+        super().__init__(self.basis_strs,self.wght_list,self.ad_mats(),Q)
+        
+    def ad_mats(self):
+        # I'll try to avoid using this
+        # Following Medvedev's basis/conventions, except the error in [Y,e_i]=(i-1)*(2*m+1-i)e_{i-1}
+        basis_len=len(self.basis_strs)
+        Y=SparseMatrix(zeros(basis_len))
+        Y[0,1]=2
+        Y[1,3]=-1
+        for i in range(2,basis_len-3):
+            Y[i+2,i+3]=(i-1)*(basis_len-4-i)
+
+        H=SparseMatrix(zeros(basis_len))
+        H[0,0]=-2
+        H[3,3]=2
+        for i in range(1,basis_len-4):
+            H[i+3,i+3]=(2*i-basis_len+4)
+
+        X=SparseMatrix(zeros(basis_len))
+        X[1,0]=1
+        X[3,1]=-2
+        for i in range(1,basis_len-5):
+            X[i+4,i+3]=1
+
+        E=SparseMatrix(zeros(basis_len))
+        for i in range(1,basis_len-4):
+            E[i+3,i+3]=1
+        E[-1,-1]=2
+
+        ei=[None]+[SparseMatrix(zeros(basis_len)) for i in range(basis_len-5)]
+
+        for i in range(2,len(ei)):
+            ei[i][2+i,0]=-(i-1)*(basis_len-4-i)
+        for i in range(1,len(ei)):
+            ei[i][3+i,1]=-(2*i-basis_len+4)
+            ei[i][3+i,2]=-1
+            ei[i][-1,basis_len-i-1]=(-1)**i
+        for i in range(1,len(ei)-1):
+            ei[i][4+i,3]=-1
+
+        N=SparseMatrix(zeros(basis_len))
+        N[-1,2]=-2
+
+        return [Y,H,E,X]+ei[1:len(ei)]+[N]
+    
+       ## Below this point, the methods are specific to the prolonged symbol for the symplectification
+
+    def first_kind_to_second(self,g_elt):
+        """Converts an element of G_+ represented in canonical coords of the first kind
+        (i.e., exp(eE+hH+yY)) to its representation in canonical coords of the second
+        kind (i.e., exp(eE+hH)exp(yY)
+
+        INPUTS:
+        * 'v' -- an element of the positive part of self.alg 
+        """
+        B=self.basis
+        v=g_elt.vec
+        if v[1]!=0: return (v[0]*(exp(2*v[1])-1)/(2*v[1]))*B[0]+v[1]*B[1]+v[2]*B[2]
+        return v[0]*B[0]+v[1]*B[1]+v[2]*B[2]
+        
+    def second_kind_to_first(self,g_elt):
+        """Converts an element of G_+ represented in canonical coords of the 
+        second kind (i.e., exp(eE+hH)exp(yY) to its representation in canonical  
+        coords of the first kind (i.e., exp(eE+hH+yY))
+
+        INPUTS:
+        * 'g_elt' -- an element of the positive part of self.alg 
+        """
+
+        if type(g_elt)==T_symb_elt or type(g_elt)==T_symb_basis_elt:
+            v=g_elt.vec
+        else: v=g_elt
+        B=self.basis
+        if v[1]!=0: return 2*v[1]*v[0]/(exp(2*v[1])-1)*B[0]+v[1]*B[1]+v[2]*B[2]
+        return v[0]*B[0]+v[1]*B[1]+v[2]*B[2]
+
+    def second_kind_inv(self,g_elt):
+        """Returns the inverse of and elt of G_+ represented in canonical coordinates
+        of the second kind.
+        
+        INPUTS:
+        * 'g_elt' -- an element of the positive part of self.alg
+        """
+        B=self.basis
+        v=g_elt.vec
+        return -exp(-2*v[1])*v[0]*B[0]-v[1]*B[1]-v[2]*B[2]
+
+    def second_kind_mul(self,g_elt_1,g_elt_2):
+        """Returns g_elt_1*g_elt_2, which is an elt of G_+ represented in canonical coordinates
+        of the second kind
+        
+        INPUTS:
+        * 'g_elt_1','g_elt_2' -- elements of the positive part of self.alg
+        """
+        B=self.basis
+        v1=g_elt_1.vec
+        v2=g_elt_2.vec
+        return (exp(2*v2[1])*v1[0]+v2[0])*B[0]+(v1[1]+v2[1])*B[1]+(v1[2]+v2[2])*B[2]
+
+# %%
+def SF_ad(X1,X2,SF):
+    '''args: X1,X2 are VFs, either T_elts or vectors/lists with coeffs indexed objects and 
+             the coordinates y,h,e SF is the structure function defining the ad-relations between 
+             T basis elts, an element of C, the cochain complex
+       returns: [X1,X2], where the str function defines the relations between T basis elts,
+               and K,y,h,e depend on the coordinates appropriately'''
+    T=SF.parent.alg
+    result=0
+    X=[X1,X2]
+    v=[None,None]
+    for j in range(2):
+        Xj=X[j]
+        vj=v[j]
+        if type(Xj)==list: v[j]=Xj
+        if type(Xj)==type(eye(4)): v[j]=list(Xj)
+        if type(Xj)==T_symb_elt or type(Xj)==T_symb_basis_elt: v[j]=Xj.vec_rep
+    for i in range(len(v[0])):
+        coeff_1=v[0][i]
+        if coeff_1!=0:
+            for j in range(len(v[1])):
+                coeff_2=v[1][j]
+                if coeff_2!=0:
+                    res1=coeff_1*abn_ind_der(coeff_2,i)*T.basis[j]
+                    res2=-coeff_2*abn_ind_der(coeff_1,j)*T.basis[i]
+                    new_res=result+res1+res2
+                    result+=res1
+                    result+=res2
+    e_elt=T.elt(v[0]).cast_as_ext_elt().wedge(T.elt(v[1]).cast_as_ext_elt())
+    result+=SF.apply_cochain_map(e_elt)
+    return result
+
+# %%
+class heis_dim_exception(Exception):
+    '''Raised when the provided heis_dim is not odd'''
+    pass
+
+class invalid_parent_exception(Exception):
+    '''Raised when the parent of an argument isn't what it should be'''  
+    pass
+
+class constr_Mat_size_exception(Exception):
+    """Raised when a constructor receives a Matrix of incorrect size"""
+    pass
+
+class arg_required_exception(Exception):
+    """Raised when a required argument is omitted"""
+    pass
