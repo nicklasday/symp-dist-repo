@@ -116,6 +116,38 @@ def Indexed_obj_in_expr(expr:sp.Expr)->set[sp.Indexed]:
         pass
     return set()
 
+def symb_in_expr(expr:sp.Expr)->set[sp.Symbol]:
+    from ..algebra.tensor_algebras import TensorAlgElt
+
+    """Returns the set of sp.Indexed obejcts which appear in expr
+    INPUTS:
+    * 'expr' - an algebraic expression in sp.Indexed objects and symbols"""
+    if isinstance(expr, sp.Pow):
+        return symb_in_expr(expr.as_base_exp()[0])
+    if isinstance(expr, sp.Mul):
+        return set.union(*[symb_in_expr(A) for A in expr.as_coeff_mul()[1]])
+    if isinstance(expr, sp.Add):
+        return set.union(*[symb_in_expr(A) for A in expr.as_coeff_add()[1]])
+    if isinstance(expr, sp.Indexed):
+        return set()
+    if isinstance(expr, sp.Symbol):
+        return set([expr])
+    if isinstance(expr, TensorAlgElt):
+        r:set[sp.Indexed] = set()
+        for d in expr.vd:
+            for w in expr.vd[d]:
+                r = r.union(symb_in_expr(expr.vd[d][w]))
+        return r
+    try:
+        iter(expr)
+        r = set()
+        for a in expr:
+            r = r.union(symb_in_expr(a))
+        return r
+    except TypeError:
+        pass
+    return set()
+
 
 def hrs_min_sec(sec_val)->str:
     hours = str(round(sec_val // (60**2)))
@@ -275,8 +307,3 @@ def wghted_mul(M1, w1, M2, w2, m):
         M2_s = M2[f[i + w1] : f[i + w1 + 1], f[j] : f[j + 1]]
         r[f[i] : f[i + 1], f[j] : f[j + 1]] = M1_s * M2_s
     return r
-
-
-# def coordinatize(b_mat,vec):
-#     '''args: b_mat, a matrix such that the span of its columns include vec, a list
-#        returns: a list coorinatizing vec in the basis b_mat'''

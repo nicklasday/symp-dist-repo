@@ -185,14 +185,19 @@ def Invol_6_Prenorm_distr(
     l = len(g.basis)
     n = int((l + 1) / 2)
 
-    # # [X,ei] = e_{i+1} mod (X)
-    for i in range(4, l - 2):
+    # # [X,e_1] = e_2 mod (X)
+    for i in range(4,5):
         for j in range(4, i + 1):
             s[K[3, i, j]] = 0
 
-    # # [e1,e6]=-N
+    # # [X,e_i] = e_{i+1} for i=2,3,4,5
+    for i in range(5, l - 2):
+        for j in range(3, i + 1):
+            s[K[3, i, j]] = 0
+
+    # # [e3,e4]=-N
     for i in range(3, l - 1):
-        s[K[4, l - 2, i]] = 0
+        s[K[6, 7, i]] = 0
 
     V_ind = [list(range(4, n))]
     for i in range(1, n - 3):

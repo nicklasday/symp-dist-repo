@@ -80,11 +80,11 @@ class Cochain(TensorAlgElt):
                 r[d + 1][w] = r[d + 1][w] + v
         return self.parent.elt(r)
 
-    def cb_preim_elt(self)->'Cochain':
+    def cb_preim_elt(self,check=False)->'Cochain':
         """Returns a cochain which maps to self under the coboundary.
         If self is not exact, returns None.
         """
-        return self.parent.cb_preim_elt(self)
+        return self.parent.cb_preim_elt(self,check)
 
     def check_valid_vd(self)->bool:
         """Returns True if self has a vector dictionary which is a

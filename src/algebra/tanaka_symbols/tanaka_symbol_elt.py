@@ -4,6 +4,7 @@ __all__ = ["TSymbElt"]
 
 import sympy as sp
 from ...utils import math_helpers as mh
+from ...utils import lin_alg_helpers as lh
 from ...utils.exceptions import constr_Mat_size_exception, invalid_ext_elt_casting
 
 if TYPE_CHECKING:

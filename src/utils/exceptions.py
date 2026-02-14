@@ -62,3 +62,13 @@ class wedge_Mat_Exception(Exception):
     def __init__(self, A, message="wedge_Mat failure:"):
         self.message = message + str(A)
         super().__init__(self.message)
+
+class Coordinatization_Exception(Exception):
+    def __init__(self,message="Failure in coordinatization"):
+        self.message = message
+        super().__init__(self.message)
+
+class Failed_Check_Exception(Exception):
+    def __init__(self,message="Failed Check"):
+        self.message = message
+        super().__init__(self.message)

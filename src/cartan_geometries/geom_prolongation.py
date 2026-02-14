@@ -201,7 +201,7 @@ class Geom_Prolongation(object):
         print("weight", k, "projection computed in time", mh.hrs_min_sec(time2 - time1))
 
         # Choose fk from the preimage for normalization
-        fk = C.cb_preim_elt(dfk)  # along the section, for modifying the frame
+        fk = C.cb_preim_elt(dfk,check=True)  # along the 0-section, for modifying the frame
         self.fk = fk
         time3 = time.time()
         print(
@@ -210,23 +210,42 @@ class Geom_Prolongation(object):
             "preimage cochain computed in time",
             mh.hrs_min_sec(time3 - time2),
         )
+        # ##------------begin deprecated code------------
+
+        # gdfk = self.alg.second_kind_inv(self.yhe_pt).Ad(dfk, mod="CE")
+        # gfk = self.alg.second_kind_inv(self.yhe_pt).Ad(fk, mod="CE")  # I think this will give a Cartan connection...
+        # self.KN = self.pK[k] + gdfk.wght_proj(k)  
+        # # I think this should be "equivariant"...equivariant in the lowest nonzero weight
+        # # since wght 3 KN is not equivariant, one of the above is not equivariant
+
+        # # # temporary for testing
+        # # self.gf.append(gfk)
+        # # self.gdf.append(gdfk)
+
+        # # modify the frame
+        # step = int((self.alg.wght_list[0] - self.alg.wght_list[-1]) / k + 1)
+        # gfk_equiv_mat = sp.simplify(C.one_cochain_mat_rep(gfk))
+        # exp_gfk, exp_gfk_inv = lh.nilp_exp(gfk_equiv_mat, step)
+
+        # ##------------end deprecated code------------
+
+        ##------------begin new code------------
+        step = int((self.alg.wght_list[0] - self.alg.wght_list[-1]) / k + 1)
+        exp_fk,exp_fk_inv=lh.nilp_exp(sp.simplify(C.one_cochain_mat_rep(fk)), step)
+
         gdfk = self.alg.second_kind_inv(self.yhe_pt).Ad(dfk, mod="CE")
-        gfk = self.alg.second_kind_inv(self.yhe_pt).Ad(
-            fk, mod="CE"
-        )  # I think this will give a Cartan connection...
-        self.KN = self.pK[k] + gdfk.wght_proj(
-            k
-        )  # I think this should be "equivariant"...equivariant in the lowest nonzero weight
+        self.KN = self.pK[k] + gdfk.wght_proj(k)  
+        # I think this should be "equivariant"...equivariant in the lowest nonzero weight
         # since wght 3 KN is not equivariant, one of the above is not equivariant
 
-        # temporary for testing
-        self.gf.append(gfk)
-        self.gdf.append(gdfk)
-
         # modify the frame
-        step = int((self.alg.wght_list[0] - self.alg.wght_list[-1]) / k + 1)
-        gfk_equiv_mat = sp.simplify(C.one_cochain_mat_rep(gfk))
-        exp_gfk, exp_gfk_inv = lh.nilp_exp(gfk_equiv_mat, step)
+        # to do: Fix this...Ad_mat isn't implemented for the cochain action
+        yhe_Ad=self.yhe_pt.Ad_mat("CE",2,k)
+        yhe_inv_Ad=self.alg.second_kind_inv(self.yhe_pt).Ad_mat("CE",2,k)
+        exp_gfk=yhe_inv_Ad*exp_fk*yhe_Ad
+        exp_gfk_inv = yhe_inv_Ad*exp_fk_inv*yhe_Ad
+        ##------------end new code------------
+
         self.FN = self.FN * exp_gfk
         self.FN_inv = exp_gfk_inv * self.FN_inv
 

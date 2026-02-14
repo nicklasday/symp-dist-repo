@@ -66,8 +66,6 @@ def Mat_adjoint(A, Q_dom, Q_codom):
     * 'Q_dom' - A matrix representing a 2-form on dom
     * 'Q_codom' - A matrix representing a 2-form on codom
     """
-    if A == sp.Matrix([[]]):
-        return sp.Matrix([[]])
     return (Q_codom * A * Q_dom.inv()).transpose()
 
 
@@ -129,15 +127,20 @@ def update_add_dict(Md1, Md2, coeff=1):
             update_add_mat(Md1, d, w, coeff * Md2[d][w])
 
 
-def nilp_exp(M, step):
+def nilp_exp(M, step=None):
     """Computes (exp(M),exp(-M)) for a nilpotent matrix M with M**step=0
     INPUTS:
     * 'M' -- a nilpotent matrix
     * 'step' -- an integer so that M**step=0
     """
     p_cache = [sp.eye(*sp.shape(M))]
-    for i in range(1, step):
-        p_cache.append(p_cache[-1] * M)
+    if step is not None:
+        for i in range(1, step):
+            p_cache.append(p_cache[-1] * M)
+    else:
+        M_to_i=p_cache[0]
+        while M_to_i!=sp.zeros(*sp.shape(M)):
+            p_cache.append(p_cache[-1] * M)
     r1 = sum([p_cache[i] / sp.factorial(i) for i in range(1, len(p_cache))], p_cache[0])
     r2 = sum(
         [(-1) ** i * p_cache[i] / sp.factorial(i) for i in range(1, len(p_cache))],
@@ -250,6 +253,10 @@ def Mat_preim_elt(M, v):
     * 'M' - A matrix representing a finite dimensional linear operator
     * 'v' - a vector in the codomain of M
     """
+    # This could also be done using pseudo-inverses (probably caching),
+    # probably more quickly
+    
+
     # We don't need to solve this entirely, just find a single preim_elt
     A = M.col_insert(sp.shape(M)[1], sp.Matrix(v))
     a = sp.symbols("a0:{num_symb}".format(num_symb=sp.shape(M)[1]))

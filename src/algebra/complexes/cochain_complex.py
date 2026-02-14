@@ -3,6 +3,8 @@ from typing import TYPE_CHECKING, Type
 import sympy as sp
 from itertools import combinations
 
+from ...utils.exceptions import Coordinatization_Exception, Failed_Check_Exception
+
 
 from ..tensor_algebras import TensorAlg
 from .cochain import Cochain
@@ -26,7 +28,9 @@ class CochainComplex(TensorAlg[Cochain]):
         super().__init__(T_symb_obj)
         self.alg:TSymb = T_symb_obj
         self.ext_alg:ExtAlg = T_symb_obj.ext_alg
-        self.cb_mat_cache:dict[tuple[int,int],sp.MatrixBase] = {}
+        self.cb_mat_cache:dict[tuple[int,int],sp.MatrixBase] = {} # indexed by source
+        self.cb_preim_mat_cache:dict[tuple[int,int],sp.MatrixBase] = {} 
+        self.pinv_cache:dict[tuple[str,int,int],sp.MatrixBase]={}
         self.subspace_cache:dict[tuple[str,int,int],sp.MatrixBase]= {}
         self.rnc:Cochain|None = None # This represents an arbitrary regular normal cochain
 
@@ -123,6 +127,73 @@ class CochainComplex(TensorAlg[Cochain]):
                 [list(c.cb_vec()) for c in self.basis(d, w)]
             ).transpose()
         return self.cb_mat_cache[(d, w)]
+    
+    def cd_mat(self, d:int, w:int)->sp.MatrixBase:
+        """Returns the codifferential matrix which operates on C^d_w
+        INPUTS:
+        * 'd' - degree
+        * 'w' - weight
+        """
+        return (self.Q(d,w).inverse_LU()*self.cb_mat(d-1,w)*self.Q(d-1,w)).transpose()
+    
+    def coordinatize_in_subspace(self,c:Cochain,d:int,w:int,subspace:str, 
+                                 subsp_check:bool=False, check_result:bool=False)->sp.MatrixBase:
+        """Returns the coordinatization of c in the basis for subspace.
+        Checks that c is homogeneous degree d and weight w, but only checks
+        that c is from the specified subspace if subsp_check is True
+        
+        INPUTS:
+        * 'c' - a cochain from self homogeneous in degree and weight from subspace
+        * 'd' - degree
+        * 'w' - weight
+        * 'subspace' - among 'closed', 'coclosed', 'exact', 'coexact', and 'harmonic'
+        * 'subsp_check' - determine if c in subspace is checked
+        * 'check_result' - determines if the result is checked"""
+        
+        # check homogeneity
+        c.clear_zeros()
+        for a in c.vd:
+            if a!=d: raise Coordinatization_Exception(
+                "Attempted to coorinatize cochain nonhomogeneous in degree")
+            for b in c.vd[a]:
+                if b!=w: raise Coordinatization_Exception(
+                "Attempted to coorinatize cochain nonhomogeneous in weight")
+        
+        B=self.subspace_basis(subspace,d,w)
+        if c.vd=={}: return sp.zeros(sp.shape(B)[1],1)
+        if subsp_check:
+            T=sp.Matrix([list(B.col(i)) for i in range(B.shape[1])]+[list(c.vd[d][w])])
+            if T.rank()!=B.shape[1]: raise Coordinatization_Exception(
+                "Attempted to coorinatize cochain not in specified subspace")
+        
+        M:sp.Matrix
+        if (subspace,d,w) in self.pinv_cache: M=self.pinv_cache[(subspace,d,w)]
+        else: M=self.subspace_basis(subspace,d,w).pinv()
+        r=M*c.vd[d][w]
+
+        if check_result:
+            c_test=self.elt({d:{w:self.subspace_basis(subspace,d,w)*r}})-c
+            ch.simplify_cochain(c_test)
+            if c_test!=self.elt({}): print(
+                'coordinatize_in_subspace failure')
+        return r
+        
+    
+    def cb_preim_mat(self,d:int,w:int)->sp.MatrixBase:
+        """Returns the matrix which computes for each exact cochain in degree d 
+        and weight w a preimage element from the coexact forms, using coords on
+        the exact and coexact spaces. The matrix represents (d^*d)^{-1}*(d^*),
+        which is an isomorphism from the exact forms to the coexact forms.
+        INPUTS:
+        * 'd' - degree
+        * 'w' - weight
+        """
+        if (d,w) not in self.cb_preim_mat_cache: 
+            self.cb_preim_mat_cache[(d,w)]=(
+                (self.cd_mat(d,w)*self.cb_mat(d-1,w)).pinv()*self.cd_mat(d,w))
+        return self.cb_preim_mat_cache[(d,w)]
+
+
 
     def cb(self, c:Cochain)->Cochain:
         """Returns the coboundary map of C(m,g) applied to c
@@ -146,7 +217,9 @@ class CochainComplex(TensorAlg[Cochain]):
         return self.elt(r)
 
     def subspace_basis(self, subspace:str, d:int, w:int)->sp.MatrixBase:
-        """Returns a basis for the subspace in degree d and weight w
+        """Returns a matrix whose columns form a basis for the subspace 
+        in degree d and weight w
+
         INPUTS:
         * 'subspace' - among 'closed', 'coclosed', 'exact', 'coexact', and 'harmonic'
         * 'd' - a degree
@@ -180,7 +253,7 @@ class CochainComplex(TensorAlg[Cochain]):
             ).transpose()
         return self.subspace_cache[(subspace, d, w)]
 
-    def cb_preim_elt(self, c:Cochain)->Cochain|None:
+    def cb_preim_elt(self, c:Cochain,check=False)->Cochain|None:
         """Returns a cochain which maps to c under the coboundary.
         If c is not exact, returns None.
         INPUTS:
@@ -189,7 +262,9 @@ class CochainComplex(TensorAlg[Cochain]):
         r:dict[int,dict[int,sp.MatrixBase]] = {}
         for d in c.vd:
             for w in c.vd[d]:
-                t = lh.new_Mat_preim_elt(self.cb_mat(d - 1, w), c.vd[d][w])
+                # To do: Figure out why the exponentiation takes longer for the second version
+                # t = lh.new_Mat_preim_elt(self.cb_mat(d - 1, w), c.vd[d][w])
+                t = self.cb_preim_mat(d,w)*c.vd[d][w]
                 if t is None:
                     return None
                 if d - 1 not in r:
@@ -198,6 +273,12 @@ class CochainComplex(TensorAlg[Cochain]):
                     r[d - 1][w] = t
                 else:
                     r[d - 1][w] = r[d - 1][w] + t
+        result=self.elt(r)
+        if check:
+            test=result.cb()-c
+            ch.simplify_cochain(test)
+            if test!=self.elt({}):
+                raise Failed_Check_Exception("Failed check in cb_preim_elt")
         return self.elt(r)
 
     def curv_dict_to_cochain(self, c:dict[tuple[int,int],sp.MatrixBase]):

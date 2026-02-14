@@ -12,12 +12,14 @@ import copy
 if TYPE_CHECKING:
     from ..algebra.complexes.cochain import Cochain
     from ..distributions import Distr_of_constant_symbol
+    from ..algebra.tanaka_symbols import TSymb
 
 def ds_val(ds_dict:dict[sp.Indexed,dict[tuple[int,...],sp.Expr]], a:sp.Indexed)->tuple[sp.Expr,set[tuple[sp.Indexed,tuple[int,...]]]]:
     """Returns the value of 'a' according to ds_dict along with the keys of ds_dict used in the substitution
     INPUTS:
     * 'ds_dict' - a differential substitution dictionary
-    * 'a' - an Indexed object, representing a derivative of a (2,1)-tensor with base K or an invariant I or W
+    * 'a' - an Indexed object, representing a derivative of a 
+            (2,1)-tensor with base K, alpha, or eta; or an invariant I or W
     """
     from ..distributions import Distr_of_constant_symbol
 
@@ -56,10 +58,10 @@ def ds_val(ds_dict:dict[sp.Indexed,dict[tuple[int,...],sp.Expr]], a:sp.Indexed)-
 def add_expr_to_ds_dict(
     expr:sp.Expr,
     ds_dict:dict[sp.Indexed,dict[tuple[int,...],sp.Expr]],
-    Distr:Distr_of_constant_symbol,
-    rel_Bianchi_terms=None,
+    g:TSymb,
+    rel_Bianchi_terms:set|None=None,
     fund_invars:list[sp.Indexed]=[],
-    rel_Bianchi_dict=None,
+    rel_Bianchi_dict:dict|None=None,
     not_added:list[sp.Expr]|None=None,
 )->None:
     """ "Computes a substitution from the equation expr==0, substituting back into ds_dict.
@@ -107,7 +109,7 @@ def add_expr_to_ds_dict(
         temp_inv = {temp[Kijk]: Kijk for Kijk in temp}
         s = sp.solve(expr.xreplace(temp), sp.Symbol(str(curr_K)))[0].xreplace(temp_inv)
     ds_add_key(
-        curr_K, s, ds_dict, Distr, rel_Bianchi_terms, rel_Bianchi_dict, not_added
+        curr_K, s, ds_dict, g, rel_Bianchi_terms, rel_Bianchi_dict, not_added
     )
 
 
@@ -162,14 +164,14 @@ def ds_subs(expr:sp.Expr,
 
 def ds_back_substitute(d1:dict[sp.Indexed,dict[tuple[int,...],sp.Expr]], 
                        d2:dict[sp.Indexed,dict[tuple[int,...],sp.Expr]], 
-                       Distr:Distr_of_constant_symbol, 
+                       g:TSymb, 
                        min_wght:int, 
                        rel_Bianchi_dict=None, 
                        not_added=None)->None:
     """Back substitutes d2 into d1
     INPUTS:
     * 'd1,d2' - differential substitution dictionaries
-    * 'Distr' - a distribution of constant symbol
+    * 'g' - a TSymb elt, whose weights will be used in calculations
     * 'min_wght' - the minimal weight of the keys of d2"""
     temp_rel_Bianchi_dict = {}
     removed_ids = {}
@@ -190,15 +192,16 @@ def ds_back_substitute(d1:dict[sp.Indexed,dict[tuple[int,...],sp.Expr]],
     # Back substitute
     for a in d1:
         for b in d1[a]:
-            my_wght = mh.wght_of_ind(a, Distr.Tanaka_symbol)
+            my_wght = mh.wght_of_ind(a, g)
             for i in b:
-                my_wght += -Distr.Tanaka_symbol.basis[i].wght
+                my_wght += -g.basis[i].wght
             if my_wght >= min_wght:
                 d1[a][b], temp_keys = ds_subs(d1[a][b], d2)
                 if rel_Bianchi_dict is not None:
                     temp_rel_Bianchi_keys = set().union(
                         *[rel_Bianchi_dict[c[0]][c[1]] for c in temp_keys]
                     )
+                    if a not in rel_Bianchi_dict: rel_Bianchi_dict[a]={}
                     rel_Bianchi_dict[a][b] = rel_Bianchi_dict[a][b].union(
                         temp_rel_Bianchi_keys
                     )
@@ -221,10 +224,10 @@ def ds_back_substitute(d1:dict[sp.Indexed,dict[tuple[int,...],sp.Expr]],
                         temp_rel_Bianchi_dict[removed_ids[a]]
                     )
             add_expr_to_ds_dict(
-                rI1, d1, Distr, temp_rel_Bianchi_keys, rel_Bianchi_dict, not_added
+                rI1, d1, g, temp_rel_Bianchi_keys, rel_Bianchi_dict, not_added
             )  # This is changing keys of d1 and rel_Bianchi_dict
         else:
-            add_expr_to_ds_dict(rI, d1, Distr)
+            add_expr_to_ds_dict(rI, d1, g)
     return None
 
 
@@ -232,7 +235,7 @@ def ds_add_key(
     key:sp.Indexed,
     val:sp.Expr,
     ds_dict:dict[sp.Indexed,dict[tuple[int,...],sp.Expr]],
-    Distr:Distr_of_constant_symbol,
+    g:TSymb,
     rel_Bianchi_keys=None,
     rel_Bianchi_dict=None,
     not_added=None,
@@ -243,7 +246,7 @@ def ds_add_key(
     * 'key' - an indexed object
     * 'val' - the value the indexed object should be replaced with
     * 'ds_dict' - the ds_dict to which the key-value pair should be added
-    * 'Distr' - the distribution which should be used for curvature calculations
+    * 'g' - a TSymb elt, whose weights will be used in calculations
     * 'rel_Bianchi_keys' - a set of tuples referring to components of the Bianchi identity
     * 'rel_Bianchi_dict' - a dictionary keeping track of the components of the Bianchi identity
                            being which are needed to derive a given relation
@@ -256,7 +259,7 @@ def ds_add_key(
         rel_Bianchi_dict[b_key][post] = rel_Bianchi_keys
     # first back substitute
     ds_back_substitute(
-        ds_dict, {b_key: {post: val}}, Distr, -sp.oo, rel_Bianchi_dict, not_added
+        ds_dict, {b_key: {post: val}}, g, -sp.oo, rel_Bianchi_dict, not_added
     )
     # then add the key if it's not redundant
     new_expr, rel_keys = ds_subs(key - val, ds_dict)
@@ -267,7 +270,7 @@ def ds_add_key(
     else:
         temp_rel_Bianchi_keys = None
     if new_expr != key - val:
-        add_expr_to_ds_dict(new_expr, ds_dict, Distr, temp_rel_Bianchi_keys, not_added)
+        add_expr_to_ds_dict(new_expr, ds_dict, g, temp_rel_Bianchi_keys, not_added)
     else:
         if b_key not in ds_dict:
             ds_dict[b_key] = {}
@@ -296,6 +299,8 @@ def subs_needed(expr:sp.Expr, ds_dict:dict[sp.Indexed,dict[tuple[int,...],sp.Exp
 
 
 def ds_subs_needed(ds_dict:dict[sp.Indexed,dict[tuple[int,...],sp.Expr]])->bool:
+    """Returns True if the values of the differential substitution dictionary ds_dict
+        involve its keys, so that additional back substitution is possible. Returns False otherwise. """
     for k in ds_dict:
         for j in ds_dict[k]:
             if subs_needed(ds_dict[k][j], ds_dict):
@@ -327,7 +332,7 @@ def process_JI(
         add_expr_to_ds_dict(
             expr,
             ds_dict,
-            Distr,
+            Distr.Tanaka_symbol,
             {ind}.union(temp_keys),
             fund_invars,
             rel_Bianchi_dict,
@@ -335,6 +340,6 @@ def process_JI(
         )
     else:
         add_expr_to_ds_dict(
-            expr, ds_dict, Distr, fund_invars=fund_invars, not_added=not_added
+            expr, ds_dict, Distr.Tanaka_symbol, fund_invars=fund_invars, not_added=not_added
         )
     return None
