@@ -1,6 +1,8 @@
-# Symplectic Distribution
+# Symplectified Distributions
 
-A Python package for working with symplectic distributions and Cartan geometry.
+A Python package for working with the symplectification of rank 2 vector distributions and their Cartan geometries, as constructed in the 2009 paper "On local geometry of non‐holonomic rank 2 distributions" of B. Doubrov and I. Zelenko, or as outlined in the 2025 paper "Symplectification of Rank 2 Distributions, Normal Cartan Connections, and Cartan Prolongations" of N. Day, B. Doubrov, and I. Zelenko (you can find an ArXiv version of this paper [here](https://arxiv.org/abs/2506.09232).
+
+Note that this is a working research tool, not a published library.
 
 ## Installation
 
