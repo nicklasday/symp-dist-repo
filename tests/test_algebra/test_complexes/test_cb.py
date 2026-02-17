@@ -1,6 +1,6 @@
 import unittest
 import sympy as sp
-from src.algebra.tanaka_symbols.symplectic_symbol import SympSymb
+from symp_dist.algebra.tanaka_symbols.symplectic_symbol import SympSymb
 
 class TestCb(unittest.TestCase):
     # To do: test this more thoroughly!

@@ -1,8 +1,8 @@
 import unittest
 import sympy as sp
-from src.algebra.tanaka_symbols.symplectic_symbol import SympSymb
-from src.distributions import Free_distr,Vector_Field
-from src.cartan_geometries import Geom_Prolongation
+from symp_dist.algebra.tanaka_symbols.symplectic_symbol import SympSymb
+from symp_dist.distributions import Free_distr,Vector_Field
+from symp_dist.cartan_geometries import Geom_Prolongation
 
 class test_Omega_1_bracket(unittest.TestCase):
     def setUp(self):

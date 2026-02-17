@@ -1,6 +1,6 @@
 import unittest
 import random
-from src.algebra.tanaka_symbols.symplectic_symbol import SympSymb
+from symp_dist.algebra.tanaka_symbols.symplectic_symbol import SympSymb
 
 class TestPreim(unittest.TestCase):
     def test_preim(self):

@@ -1,8 +1,8 @@
 import unittest
 import sympy as sp
-from src.algebra.tanaka_symbols.symplectic_symbol import SympSymb
-from src.distributions.particular_distributions import Free_distr
-from src.cartan_geometries.geom_prolongation import Geom_Prolongation
+from symp_dist.algebra.tanaka_symbols.symplectic_symbol import SympSymb
+from symp_dist.distributions.particular_distributions import Free_distr
+from symp_dist.cartan_geometries.geom_prolongation import Geom_Prolongation
 
 class TestApplyCochainMap(unittest.TestCase):
     def setUp(self):

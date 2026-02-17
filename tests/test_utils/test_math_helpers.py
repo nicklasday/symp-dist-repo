@@ -1,6 +1,6 @@
 import unittest
-from src.utils import math_helpers as mh
-from src.utils import coeff_dict_helpers as cdh
+from symp_dist.utils import math_helpers as mh
+from symp_dist.utils import coeff_dict_helpers as cdh
 
 class helpers_test(unittest.TestCase):
     def test_str_from_coeff_dict(self):

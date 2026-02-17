@@ -1,8 +1,8 @@
 import unittest
 import sympy as sp
-from src.algebra.tanaka_symbols.symplectic_symbol import SympSymb
-from src.algebra.tanaka_symbols.tanaka_symbol_basis_elt import TSymbBasisElt
-from src.utils.exceptions import invalid_parent_exception
+from symp_dist.algebra.tanaka_symbols.symplectic_symbol import SympSymb
+from symp_dist.algebra.tanaka_symbols.tanaka_symbol_basis_elt import TSymbBasisElt
+from symp_dist.utils.exceptions import invalid_parent_exception
 
 class test_T_symb_basis_elt(unittest.TestCase):
     def setUp(self):

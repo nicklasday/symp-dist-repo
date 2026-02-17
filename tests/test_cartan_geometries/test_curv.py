@@ -1,9 +1,9 @@
 import unittest
 import sympy as sp
-from src.utils import cochain_helpers as ch
-from src.algebra.tanaka_symbols.symplectic_symbol import SympSymb
-from src.distributions import Free_distr
-from src.cartan_geometries import Geom_Prolongation
+from symp_dist.utils import cochain_helpers as ch
+from symp_dist.algebra.tanaka_symbols.symplectic_symbol import SympSymb
+from symp_dist.distributions import Free_distr
+from symp_dist.cartan_geometries import Geom_Prolongation
 
 # Commented out for time purposes
 class test_curv(unittest.TestCase):

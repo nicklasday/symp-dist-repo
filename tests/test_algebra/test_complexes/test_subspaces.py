@@ -1,8 +1,8 @@
 # Commented out for time purposes
 import unittest
 import sympy as sp
-from src.utils import lin_alg_helpers as lh
-from src.algebra.tanaka_symbols.symplectic_symbol import SympSymb
+from symp_dist.utils import lin_alg_helpers as lh
+from symp_dist.algebra.tanaka_symbols.symplectic_symbol import SympSymb
 
 class TestSubspaces(unittest.TestCase):
     def test_subspaces_orthogonality(self):

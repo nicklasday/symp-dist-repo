@@ -1,8 +1,8 @@
-from algebra.complexes.cochain import Cochain
-from algebra.tanaka_symbols.tanaka_symbol_basis_elt import TSymbBasisElt
-from algebra.tanaka_symbols.tanaka_symbol_elt import TSymbElt
+from symp_dist.algebra.complexes.cochain import Cochain
+from symp_dist.algebra.tanaka_symbols.tanaka_symbol_basis_elt import TSymbBasisElt
+from symp_dist.algebra.tanaka_symbols.tanaka_symbol_elt import TSymbElt
 import sympy as sp
-import utils.distribution_helpers as dh
+import symp_dist.utils.distribution_helpers as dh
 
 
 def SF_ad(X1, X2, SF:Cochain):

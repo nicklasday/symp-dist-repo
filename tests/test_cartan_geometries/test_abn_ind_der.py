@@ -1,7 +1,7 @@
 import unittest
 import sympy as sp
-from src.algebra.tanaka_symbols.symplectic_symbol import SympSymb
-from src.distributions import Distr_of_constant_symbol
+from symp_dist.algebra.tanaka_symbols.symplectic_symbol import SympSymb
+from symp_dist.distributions import Distr_of_constant_symbol
 
 class abn_ind_der_test(unittest.TestCase):
     def setUp(self):
